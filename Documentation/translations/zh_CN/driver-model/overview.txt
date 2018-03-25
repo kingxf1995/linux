@@ -1,0 +1,120 @@
+Chinese translated version of Documentation/driver-model/overview.txt
+
+If you have any comment or update to the content, please contact the
+original document maintainer directly.  However, if you have a problem
+communicating in English you can also ask the Chinese maintainer for
+help.  Contact the Chinese maintainer if this translation is outdated
+or if there is a problem with the translation.
+
+Maintainer: Patrick Mochel	<mochel@digitalimplant.org>
+Chinese maintainer: Tan Xiaofan <xfan1024@live.com>
+
+Drafted 26 August 2002
+Updated 31 January 2006
+
+---------------------------------------------------------------------
+Documentation/driver-model/overview.txt 的中文翻译
+
+如果想评论或更新本文的内容，请直接联系原文档的维护者。如果你使用英文
+交流有困难的话，也可以向中文版维护者求助。如果本翻译更新不及时或者翻
+译存在问题，请联系中文版维护者。
+
+英文版维护者： Patrick Mochel	<mochel@digitalimplant.org>
+中文版维护者： 谭小凡  Tan Xiaofan <xfan1024@live.com>
+
+以下为正文
+---------------------------------------------------------------------
+
+Linux内核设备模型
+
+
+综述
+~~~~~~~~
+
+Linux内核驱动模型是一种以前在用的所有模型的统一。它目的在于通过增加一组数据和
+方法到全局的数据结构上为桥和设备增加总线驱动
+
+传统的驱动模型为他们要控制的设备实现了一个有序的类树结构（有时只是一个链表），
+在不同的总线类型间他们并不是统一的。
+
+现在的驱动模型提供了一个公共的、统一的数据模型来描述总线和可被总线发现的设备。
+统一的总线模型包含了一组公共的属性和一组公共的回调，用来总线发现，总线关闭，
+总线电源管理等等
+
+设备与桥接口反应了现代计算机的目标：也就是“即插即用”的能力，可电源管理，可热插拔。
+特别的，这个模型被Intel和Microsoft使用（即ACPI），确保每个设备几乎都挂在总线上，
+x86兼容系统则可在这个范式下运行。当然，不是所有总线都完全支持以这些操作，但是大
+部分总线是支持大部分的这些操作。
+
+
+下游开发
+~~~~~~~~~~~~~~~~~
+
+公共的数据成员已经从单独的总线层移动到公共的数据结构中了。这些成员必须总是能够
+被总线层访问，有时需要被特定设备驱动访问。
+
+其它总线驱动层最好是像PCI总线驱动层做的那样
+struct pci_dev 现在大概长这个样子：
+
+struct pci_dev {
+	...
+
+	struct device dev;     /* Generic device interface */
+	...
+};
+
+首先要注意的是struct device dev在struct pci_dev中是被静态申请的。意思是在
+设备发现的过程中，说只为设备申请一次内存。
+
+然后要注意的是struct device dev并不必被定义在pci_dev结构体的头部。这是为了
+使开发者思考在切换总线驱动和全局驱动时他们做了什么，并且阻止他们在这两者之
+间做没有意义和不正确的转换。
+
+PCI总线驱动层自由地访问struct device的成员，这是因为它知道这个结构体在
+struct pci_dev中。通常单独的PCI设备驱动已经被转换到当前驱动模型下了，不要去动
+struct device下的成员，除非有什么迫不得已的理由需要这么做。
+
+以上说明防止你在过渡期间不必要的痛苦。如果不这样做，那么所有的数据成员将会被
+重命名或者被移除，所有的下游驱动都会坏掉。另一方面，如果只是总线层（不是设备层）
+访问struct device，那么仅仅只是总线层需要被修改。
+
+
+用户接口
+~~~~~~~~~~~~~~
+
+通过系统中所有设备的完全分层的结构所带来的优点，内核将完全分层的结构导出到
+用户空间变得相对简单。这些的实现是通过一个名为sysfs的虚拟文件系统来完成的。
+
+几乎所有的主流Linux发行版会自动挂载这个文件系统；你可以输入“mount”命令来看到
+类似于以下内容的输出
+
+$ mount
+...
+none on /sys type sysfs (rw,noexec,nosuid,nodev)
+...
+$
+
+自动挂载sysfs文件系统通常是通过/etc/fstab文件中的一条记录实现的，大概如下所示
+
+none     	/sys	sysfs    defaults	  	0 0
+
+或者在基于debian的系统中，在/lib/init/fstab下有着类似于以下内容的记录
+
+none            /sys    sysfs    nodev,noexec,nosuid    0 0
+
+如果sysfs没有被自动挂载，你可以通过以下命令手动挂载
+
+# mount -t sysfs sysfs /sys
+
+每当设备被加入到设备树上时，sysfs中会为它创建一个目录。这个目录可以会出现在以下
+每个层的目录中 —— 全局层、总线层、设备层。
+
+全局层目前创建两个文件 - ‘name’ 和 ‘power’。前者只报告这个设备的名字，后者报告
+该设备当前的电源状态。它通常被用来设置设备当前的电源状态
+
+总线层在探测总线时可能也会为设备创建一些文件，比如说 PCI层会为每个设备都创建
+‘irq’和‘resource’文件
+
+一个特定设备驱动在设备自己的目录瞎导出一些与设备相关的数据文件或者操作接口
+
+更多与sysfs目录相关的信息在在当前目录下别的文档中，还有Documentation/filesystems/sysfs.txt
